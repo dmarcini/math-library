@@ -1,3 +1,10 @@
+.vscode
+bin
+build
+
+Makefile
+src/main.cpp
+
 # Prerequisites
 *.d
 
