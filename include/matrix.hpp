@@ -103,6 +103,8 @@ public:
     void initialize(const Matrix<T> &matrix);
 
     void resize(size_t rows, size_t elements);
+
+    void fill_row(size_t row_num, const std::string &row);
 private:
     std::vector<std::vector<T>> matrix_ {};
     size_t rows_ {0};
@@ -440,8 +442,12 @@ void Matrix<T>::initialize(const size_t rows, const size_t elements,
 {
     allocate(rows, elements);
 
-    for (auto row : matrix) {
-        utility::from_string(row, ' ', matrix_.back());
+    for (size_t row {0}; row < rows_; ++row) {
+        std::vector<T> row_vec {};
+
+        utility::from_string(matrix[row], ' ', row_vec);
+
+        matrix_[row] = row_vec;
     }
 }
 
@@ -452,9 +458,7 @@ void Matrix<T>::initialize(const Matrix<T> &matrix)
     allocate(matrix.rows(), matrix.elements());
 
     for (size_t row {0}; row < rows_; ++row) {
-        for (size_t element{0}; element < elements_; ++element) {
-            matrix_[row][element] = matrix(row, element);
-        }
+        matrix_[row] = matrix[row];
     }
 }
 
@@ -470,6 +474,19 @@ void Matrix<T>::resize(size_t rows, size_t elements)
     for (auto &row : matrix_) {
         row.resize(elements);
     }
+}
+
+
+template<typename T>
+void Matrix<T>::fill_row(const size_t row_num, const std::string &row)
+{
+    assert(row_num < rows_);
+
+    std::vector<T> row_vec {};
+
+    utility::from_string(row, ' ', row_vec);
+
+    matrix_[row_num] = row_vec;
 }
 
 } // namespace math
