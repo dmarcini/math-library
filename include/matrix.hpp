@@ -11,6 +11,7 @@
 #include <type_traits>
 #include <utility>
 #include <cassert>
+#include <optional>
 
 #include "string_utility.hpp"
 
@@ -18,7 +19,7 @@
 namespace math {
 
 template<typename T,
-         typename = typename std::enable_if<std::is_arithmetic<T>::value>::type>
+         typename = std::enable_if_t<std::is_arithmetic<T>::value>>
 class Matrix;
 
 
@@ -29,11 +30,18 @@ public:
     using Iterator = typename std::vector<std::vector<T>>::iterator;
     using ConstIterator = typename std::vector<std::vector<T>>::const_iterator;
 
+    Matrix() = default;
+    Matrix(size_t size);
+    Matrix(size_t rows, size_t elements);
+    Matrix(size_t size, const std::vector<std::string> &matrix);
+    Matrix(size_t size, std::vector<std::string> &&matrix);
     Matrix(size_t rows, size_t elements,
-           const std::vector<std::string> &matrix = {});
+           const std::vector<std::string> &matrix);
+    Matrix(size_t rows, size_t elements, std::vector<std::string> &&matrix);
 
     Matrix(const Matrix<T> &matrix);
     Matrix<T>& operator=(const Matrix<T> &matrix);
+
     Matrix(Matrix<T> &&matrix);
     Matrix<T>& operator=(Matrix<T> &&matrix);
 
@@ -92,19 +100,25 @@ public:
     size_t rows() const { return rows_; };
     size_t elements() const { return elements_; };
 
-    T min_element(size_t row) const;
-    T min_element() const;
-    T max_element(size_t row) const;
-    T max_element() const;
+    std::optional<T> min_element(size_t row) const;
+    std::optional<T> min_element() const;
+    std::optional<T> max_element(size_t row) const;
+    std::optional<T> max_element() const;
 
-    void allocate(size_t rows, size_t elements);
-    void initialize(size_t rows, size_t elements,
-                    const std::vector<std::string> &matrix);
-    void initialize(const Matrix<T> &matrix);
-
+    void resize(size_t size);
     void resize(size_t rows, size_t elements);
 
-    void fill_row(size_t row_num, const std::string &row);
+    template<typename V>
+    void initialize(size_t size, V &&matrix);
+
+    template<typename V>
+    void initialize(size_t rows, size_t elements, V &&matrix);
+
+    void initialize(const Matrix<T> &matrix);
+    void initialize(Matrix<T> &&matrix);
+
+    template<typename V>
+    void fill_row(size_t row_num, V &&row);
 private:
     std::vector<std::vector<T>> matrix_ {};
     size_t rows_ {0};
@@ -113,19 +127,55 @@ private:
 
 
 template<typename T>
+Matrix<T>::Matrix(size_t size)
+{
+    resize(size, size);
+}
+
+
+template<typename T>
+Matrix<T>::Matrix(size_t rows, size_t elements)
+{
+    resize(rows, elements);
+}
+
+
+template<typename T>
+Matrix<T>::Matrix(size_t size, const std::vector<std::string> &matrix)
+{
+    initialize(size, size, matrix);
+}
+
+
+template<typename T>
+Matrix<T>::Matrix(size_t size, std::vector<std::string> &&matrix)
+{
+    initialize(size, size, std::move(matrix));
+}
+
+
+template<typename T>
 Matrix<T>::Matrix(const size_t rows, const size_t elements,
                   const std::vector<std::string> &matrix)
-    : rows_(rows), elements_(elements)
 {
     initialize(rows, elements, matrix);
 }
 
 
 template<typename T>
-Matrix<T>::Matrix(const Matrix<T> &matrix)
+Matrix<T>::Matrix(const size_t rows, const size_t elements,
+                  std::vector<std::string> &&matrix)
 {
-    initialize(matrix);
+    initialize(rows, elements, std::move(matrix));
 }
+
+
+template<typename T>
+Matrix<T>::Matrix(const Matrix<T> &matrix)
+    : matrix_(matrix.matrix_),
+      rows_(matrix.rows_),
+      elements_(matrix.elements_)
+{}
 
 
 template<typename T>
@@ -139,9 +189,10 @@ Matrix<T>& Matrix<T>::operator=(const Matrix<T> &matrix)
 
 template<typename T>
 Matrix<T>::Matrix(Matrix<T> &&matrix)
-{
-    initialize(std::move(matrix));
-}
+    : matrix_(std::move(matrix.matrix_)),
+      rows_(std::move(matrix.rows_)),
+      elements_(std::move(matrix.elements_))
+{}
 
 
 template<typename T>
@@ -156,50 +207,66 @@ Matrix<T>& Matrix<T>::operator=(Matrix<T> &&matrix)
 template<typename T>
 T& Matrix<T>::operator()(size_t row)
 {
-    return matrix_.at(row);
+    assert(row >= 0 && row < rows_);
+
+    return matrix_[row];
 }
 
 
 template<typename T>
 const T& Matrix<T>::operator()(size_t row) const
 {
-    return matrix_.at(row);
-}
-
-
-template<typename T>
-const T& Matrix<T>::operator()(const size_t row, const size_t element) const
-{
-    return matrix_.at(row).at(element);
+    return (*this)(row);
 }
 
 
 template<typename T>
 T& Matrix<T>::operator()(const size_t row, const size_t element)
 {
-    return matrix_.at(row).at(element);
+    assert(row >= 0 && row < rows_);
+    assert(element >= 0 && element < elements_);
+
+    return matrix_[row][element];
+}
+
+
+template<typename T>
+const T& Matrix<T>::operator()(const size_t row, const size_t element) const
+{
+    return (*this)(row, element);
 }
 
 
 template<typename T>
 std::vector<T>& Matrix<T>::operator[](size_t row)
 {
-    return matrix_.at(row);
+    assert(row >= 0 && row < rows_);
+
+    return matrix_[row];
 }
 
 
 template<typename T>
 const std::vector<T>& Matrix<T>::operator[](size_t row) const
 {
-    return matrix_.at(row);
+    return (*this)[row];
 }
 
 
 template<typename T>
 std::ostream& operator<<(std::ostream &os, const Matrix<T> &matrix)
 {
-    auto min_element_str_size {utility::to_string(matrix.min_element()).size()};
-    auto max_element_str_size {utility::to_string(matrix.max_element()).size()};
+    std::optional<T> min_element = matrix.min_element();
+    std::optional<T> max_element = matrix.max_element();
+
+    if (!min_element.has_value() || !max_element.has_value()) {
+        os << "Matrix doesn't exists!\n";
+
+        return os;
+    }
+
+    auto min_element_str_size {std::string(1, min_element.value()).length()};
+    auto max_element_str_size {std::string(1, max_element.value()).length()};
 
     auto width {min_element_str_size > max_element_str_size
                 ? min_element_str_size : max_element_str_size};
@@ -370,7 +437,7 @@ void Matrix<T>::transpose()
     auto tmp_matrix(std::move(matrix_));
 
     std::swap(rows_, elements_);
-    allocate(rows_, elements_);
+    resize(rows_, elements_);
 
     for (size_t row {0}; row < rows_; ++row) {
         for (size_t element {0}; element < elements_; ++element) {
@@ -381,20 +448,29 @@ void Matrix<T>::transpose()
 
 
 template<typename T>
-T Matrix<T>::min_element(const size_t row) const
+std::optional<T> Matrix<T>::min_element(const size_t row) const
 {
-    return *std::min_element(matrix_.at(row).begin(), matrix_.at(row).end());
+    if (row < 0 || row >= rows_) {
+        return std::nullopt;
+    }
+
+    return *std::min_element(matrix_[row].begin(), matrix_[row].end());
 }
 
 
 template<typename T>
-T Matrix<T>::min_element() const
+std::optional<T> Matrix<T>::min_element() const
 {
-    auto cur_min_element {std::numeric_limits<T>::max()};
+    if (matrix_.size() == 0) {
+        return std::nullopt;
+    }
+
+    std::optional<T> cur_min_element {std::numeric_limits<T>::max()};
 
     for (size_t row {0}; row < matrix_.size(); ++row) {
-        cur_min_element = min_element(row) < cur_min_element
-                          ? min_element(row) : cur_min_element;
+        if (min_element(row).value() < cur_min_element.value()) {
+            cur_min_element.emplace(min_element(row).value());
+        }
     }
 
     return cur_min_element;
@@ -402,20 +478,29 @@ T Matrix<T>::min_element() const
 
 
 template<typename T>
-T Matrix<T>::max_element(const size_t row) const
+std::optional<T> Matrix<T>::max_element(const size_t row) const
 {
-    return *std::max_element(matrix_.at(row).begin(), matrix_.at(row).end());
+    if (row < 0 || row >= rows_) {
+        return std::nullopt;
+    }
+
+    return *std::max_element(matrix_[row].begin(), matrix_[row].end());
 }
 
 
 template<typename T>
-T Matrix<T>::max_element() const
+std::optional<T> Matrix<T>::max_element() const
 {
-    auto cur_max_element {std::numeric_limits<T>::min()};
+    if (matrix_.size() == 0) {
+        return std::nullopt;
+    }
+
+    std::optional<T> cur_max_element {std::numeric_limits<T>::min()};
 
     for (size_t row {0}; row < matrix_.size(); ++row) {
-        cur_max_element = max_element(row) > cur_max_element
-                          ? max_element(row) : cur_max_element;
+        if (max_element(row).value() > cur_max_element.value()) {
+            cur_max_element.emplace(max_element(row).value());
+        }
     }
 
     return cur_max_element;
@@ -423,8 +508,17 @@ T Matrix<T>::max_element() const
 
 
 template<typename T>
-void Matrix<T>::allocate(const size_t rows, const size_t elements)
+void Matrix<T>::resize(const size_t size)
 {
+    resize(size, size);
+}
+
+
+template<typename T>
+void Matrix<T>::resize(const size_t rows, const size_t elements)
+{
+    assert(rows > 0 && elements > 0);
+
     rows_ = rows;
     elements_ = elements;
 
@@ -437,17 +531,36 @@ void Matrix<T>::allocate(const size_t rows, const size_t elements)
 
 
 template<typename T>
-void Matrix<T>::initialize(const size_t rows, const size_t elements,
-                           const std::vector<std::string> &matrix)
+template<typename V>
+void Matrix<T>::initialize(const size_t size, V &&matrix)
 {
-    allocate(rows, elements);
+    initialize(size, size, std::forward<V>(matrix));
+}
+
+
+template<typename T>
+template<typename V>
+void Matrix<T>::initialize(const size_t rows, const size_t elements,
+                           V &&matrix)
+{
+    static_assert(std::is_same<std::vector<std::string>,
+                               std::remove_reference_t<V>>() ||
+                  std::is_same<std::vector<const char*>,
+                               std::remove_reference_t<V>>(),
+                  "Matrix must be initialized from const char* "
+                  "or string vector!");
+
+    using MatrixValueType = typename std::remove_reference<V>::type::value_type;
+
+    resize(rows, elements);
 
     for (size_t row {0}; row < rows_; ++row) {
         std::vector<T> row_vec {};
 
-        utility::from_string(matrix[row], ' ', row_vec);
+        utility::from_string(std::forward<MatrixValueType>(matrix[row]),
+                             ' ', row_vec);
 
-        matrix_[row] = row_vec;
+        matrix_[row] = std::move(row_vec);
     }
 }
 
@@ -455,36 +568,33 @@ void Matrix<T>::initialize(const size_t rows, const size_t elements,
 template<typename T>
 void Matrix<T>::initialize(const Matrix<T> &matrix)
 {
-    allocate(matrix.rows(), matrix.elements());
-
-    for (size_t row {0}; row < rows_; ++row) {
-        matrix_[row] = matrix[row];
-    }
+    matrix_ = matrix.matrix_;
+    rows_ = matrix.rows_;
+    elements_ = matrix.elements_;
 }
 
 
 template<typename T>
-void Matrix<T>::resize(size_t rows, size_t elements)
+void Matrix<T>::initialize(Matrix<T> &&matrix)
 {
-    rows_ = rows;
-    elements_ = elements;
-
-    matrix_.resize(rows);
-
-    for (auto &row : matrix_) {
-        row.resize(elements);
-    }
+    matrix_ = std::move(matrix.matrix_);
+    rows_ = std::move(matrix.rows_);
+    elements_ = std::move(matrix.elements_);
 }
 
 
 template<typename T>
-void Matrix<T>::fill_row(const size_t row_num, const std::string &row)
+template<typename V>
+void Matrix<T>::fill_row(const size_t row_num, V &&row)
 {
     assert(row_num < rows_);
+    static_assert(std::is_same<std::string, std::remove_reference_t<V>>() ||
+                  std::is_same<const char*, std::remove_reference_t<V>>(),
+                  "Row must be const char* or string!");
 
     std::vector<T> row_vec {};
 
-    utility::from_string(row, ' ', row_vec);
+    utility::from_string(std::forward<V>(row), ' ', row_vec);
 
     matrix_[row_num] = row_vec;
 }
