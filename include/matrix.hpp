@@ -31,8 +31,8 @@ public:
     using ConstIterator = typename std::vector<std::vector<T>>::const_iterator;
 
     Matrix() = default;
-    Matrix(size_t size);
-    Matrix(size_t rows, size_t elements);
+    Matrix(size_t size, T init_value = 0);
+    Matrix(size_t rows, size_t elements, T init_value = 0);
     Matrix(size_t size, const std::vector<std::string> &matrix);
     Matrix(size_t size, std::vector<std::string> &&matrix);
     Matrix(size_t rows, size_t elements,
@@ -127,16 +127,22 @@ private:
 
 
 template<typename T>
-Matrix<T>::Matrix(size_t size)
+Matrix<T>::Matrix(size_t size, T init_value)
 {
-    resize(size, size);
+    Matrix(size, size, init_value);
 }
 
 
 template<typename T>
-Matrix<T>::Matrix(size_t rows, size_t elements)
+Matrix<T>::Matrix(size_t rows, size_t elements, T init_value)
 {
     resize(rows, elements);
+
+    for (size_t i {0}; i < rows; ++i) {
+        for (size_t j {0}; j < elements; ++j) {
+            matrix_[i][j] = init_value;
+        }
+    }
 }
 
 
